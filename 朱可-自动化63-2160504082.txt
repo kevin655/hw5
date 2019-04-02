@@ -1,0 +1,265 @@
+%图像名称略有改动，如test1变为了test1__
+test4变为了test4__
+
+%第一问：
+
+clc;clear;
+fig = imread('test1__.pgm');
+[row,col] = size(fig);
+R = row *2;
+C = col * 2;
+spec = fft2(fig,R,C);
+
+subplot(1,2,1); 
+imshow(fftshift(log(1 + abs(spec))),[]);
+subplot(1,2,2); 
+mesh(fftshift(log(1 + abs(spec))));
+saveas(gcf,'result_1/a_1_freq1.bmp');
+
+D=get_D(R,C);
+D0=100;
+n=10;
+G=get_fliter('Gaussian',D,D0,n);
+subplot(1,2,1);mesh(fftshift(G)); title("Gaussian"); 
+B=get_fliter('Butterworth',D,D0,n);
+subplot(1,2,2);mesh(fftshift(B));title("Butterworth"); 
+saveas(gcf,'result_1/a_1_fliter1.bmp')
+
+[multiG,gauss]=deal_freq(spec,'G',row,col,G,B);
+[multiB,butter]=deal_freq(spec,'B',row,col,G,B);
+ratioG=cal_ratio('gauss',row,col,spec,multiG,multiB);
+ratioB=cal_ratio('butter',row,col,spec,multiG,multiB);
+figure;
+subplot(1,3,1);imshow(fig);title("origin");
+subplot(1,3,2);imshow(gauss,[]);title(['gauss with ratio ',num2str(ratioG)]);
+subplot(1,3,3);imshow(butter,[]);title(['butter with ratio ',num2str(ratioB)]);
+saveas(gcf,'result_1/a_1_result1.bmp');
+
+function ratio=cal_ratio(string,row,col,spec,multiG,multiB)
+x=0;
+a=0;
+for m = 1:1:row
+    for n = 1:1:col
+        a = a + (abs(spec(m,n))) ^ 2; 
+        switch string
+            case 'gauss'
+                x = x + (abs(multiG(m,n))) ^ 2;
+            case 'butter'
+                x = x + (abs(multiB(m,n))) ^ 2;
+        end
+    end
+end
+ratio=x/a;
+end
+
+function D=get_D(R,C)
+u=0:(R-1);
+v=0:(C-1);
+tempU=find(u > R/2);
+u(tempU)=u(tempU)-R;
+tempV=find(v > C/2);
+v(tempV)=v(tempV)-C;
+[V,U]=meshgrid(v,u);
+D = sqrt(U .^ 2 + V .^ 2);
+end
+
+function Fliter=get_fliter(str,D,D0,n)
+switch str
+    case 'Gaussian'
+        Fliter=exp(-(D.^2)./(2*(D0^2)));
+    case 'Butterworth'
+        Fliter=1./(1+(D/D0).^(2*n));
+end
+end
+
+function [multi,temp]=deal_freq(spec,fli,row,col,G,B)
+switch fli
+    case 'G'
+        multi = spec .* G;
+    case 'B'
+        multi = spec .* B;
+end
+temp=real(ifft2(multi));
+temp=temp(1:row,1:col);
+end
+
+
+%第一问改进后的：
+
+%频域低通滤波器
+%设计低通滤波器包括 butterworth and Gaussian (选择合适的半径，计算功率谱比),平滑测试图像test1和2
+test1=imread('test1__.pgm');
+test2=imread('test2__.tif');
+figure(1)
+subplot(2,4,5)
+imshow(test1);
+title('test1原图像');
+figure(2)
+subplot(2,4,5)
+imshow(test2);
+title('test2原图像');
+figure(3)
+subplot(2,4,5)
+imshow(test1);
+title('test1原图像');
+figure(4)
+subplot(2,4,5)
+imshow(test2);
+title('test2原图像');
+
+s1=size(test1);
+s2=size(test2);
+D0_1=round(s1(1)*[5,10,20]/100);
+D0_2=round(s2(1)*[5,10,20]/100);
+
+%图像离散傅里叶变换
+test1=im2double(test1);
+test2=im2double(test2);
+T1=fft2(test1,2*s1(1),2*s1(2));
+T2=fft2(test2,2*s2(1),2*s2(2));
+
+%计算总功率
+P1=sum(abs(T1(:)).^2);
+P2=sum(abs(T2(:)).^2);
+
+%滤波处理
+for i=1:3
+    %butterworth滤波处理
+    Hb1=getfilter('Butterworth',2*s1(1),2*s1(2),D0_1(i),2);
+    Hb2=getfilter('Butterworth',2*s2(1),2*s2(2),D0_2(i),2);
+    Gb1=Hb1.*T1;
+    gb1=ifft2(Gb1);
+    gb1=gb1(1:s1(1),1:s1(2));
+    Gb2=Hb2.*T2;
+    gb2=ifft2(Gb2);
+    gb2=gb2(1:s2(1),1:s2(2));
+    
+    %高斯滤波处理
+    Hg1=getfilter('Gaussian',2*s1(1),2*s1(2),D0_1(i));
+    Hg2=getfilter('Gaussian',2*s2(1),2*s2(2),D0_2(i));
+    Gg1=Hg1.*T1;
+    gg1=ifft2(Gg1);
+    gg1=gg1(1:s1(1),1:s1(2));
+    Gg2=Hg2.*T2;
+    gg2=ifft2(Gg2);
+    gg2=gg2(1:s2(1),1:s2(2));
+    
+    %计算功率谱比
+    rb1=roundn(sum(abs(Gb1(:)).^2)/P1*100,-2);
+    rb2=roundn(sum(abs(Gb2(:)).^2)/P2*100,-2);
+    rg1=roundn(sum(abs(Gg1(:)).^2)/P1*100,-2);
+    rg2=roundn(sum(abs(Gg2(:)).^2)/P2*100,-2);
+    
+    %显示图像
+    figure(1);
+    subplot(2,4,i+1)
+    imshow(fftshift(Hb1),[]);
+    title(['Butterworth,D0=',num2str(D0_1(i))]);
+    subplot(2,4,i+5)
+    imshow(gb1);
+    title(['功率谱比为',num2str(rb1),'%'])
+    
+    figure(2);
+    subplot(2,4,i+1)
+    imshow(fftshift(Hb2),[]);
+    title(['Butterworth,D0=',num2str(D0_2(i))]);
+    subplot(2,4,i+5)
+    imshow(gb2);
+    title(['功率谱比为',num2str(rb2),'%']);
+    
+    figure(3);
+    subplot(2,4,i+1)
+    imshow(fftshift(Hg1),[]);
+    title(['Gaussian,D0=',num2str(D0_1(i))]);
+    subplot(2,4,i+5)
+    imshow(gg1);
+    title(['功率谱比为',num2str(rg1),'%']);
+    
+    figure(4);
+    subplot(2,4,i+1)
+    imshow(fftshift(Hg2),[]);
+    title(['Gaussian,D0=',num2str(D0_2(i))]);
+    subplot(2,4,i+5)
+    imshow(gg2);
+    title(['功率谱比为',num2str(rg2),'%']);
+end
+
+%第二问：
+
+i=imread('test4__.bmp');
+f=double(i);
+F=fft2(f);
+F=fftshift(F);
+[p,q]=size(F);
+n=2;
+D0=25;
+for u=1:p
+    for v=1:q
+      D(u,v)=sqrt((u-fix(p/2))^2+(v-fix(q/2))^2);
+      H(u,v)=1-exp(-D(u,v)^2/(2*D0^2));
+      G(u,v)=H(u,v)*F(u,v);
+    end
+end
+g=ifftshift(G);
+g=ifft2(g);
+g=uint8(real(g));
+figure(1);
+subplot(121)
+imshow(i);
+title('原始图像');
+subplot(122)
+imshow(g);
+
+%第三问：
+
+test3=imread('test3__.pgm');
+test4=imread('test4__.bmp');
+s1=size(test3);
+s2=size(test4);
+
+%图像离散傅里叶变换
+test3=im2double(test3);
+test4=im2double(test4);
+T1=fft2(test3,2*s1(1),2*s1(2));
+T2=fft2(test4,2*s2(1),2*s2(2));
+
+%拉普拉斯算子锐化处理
+Hl1=getfilter('Laplace',2*s1(1),2*s1(2));
+Hl2=getfilter('Laplace',2*s2(1),2*s2(2));
+gl1=ifft2(Hl1.*T1);
+gl1=gl1(1:s1(1),1:s1(2));
+gl1=test3/max(test3(:))-gl1/max(abs(gl1(:)));
+gl2=ifft2(Hl2.*T2);
+gl2=gl2(1:s2(1),1:s2(2));
+gl2=test4/max(test4(:))-gl2/max(abs(gl2(:)));
+
+%非锐化掩蔽处理
+Hg1=getfilter('Gaussian',2*s1(1),2*s1(2),round(0.05*s1(1)*2));
+Hg2=getfilter('Gaussian',2*s2(1),2*s2(2),round(0.05*s2(1)*2));
+gg1=ifft2(Hg1.*T1);
+gu1=2*test3-gg1(1:s1(1),1:s1(2));
+gg2=ifft2(Hg2.*T2);
+gu2=2*test4-gg2(1:s2(1),1:s2(2));
+
+%显示图像
+figure(1);
+subplot(1,3,1)
+imshow(test3);
+title(['test3原图像']);
+subplot(1,3,2)
+imshow(gl1);
+title(['用拉普拉斯算子锐化test3图像']);
+subplot(1,3,3)
+imshow(gu1);
+title(['非锐化掩蔽处理test3图像']);
+
+figure(2);
+subplot(1,3,1)
+imshow(test4);
+title(['test4原图像']);
+subplot(1,3,2)
+imshow(gl2);
+title(['用拉普拉斯算子锐化test4图像']);
+subplot(1,3,3)
+imshow(gu2);
+title(['非锐化掩蔽处理test4图像']);
